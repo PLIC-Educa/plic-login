@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>PLIC Matemática</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#DDF0FF;--dot:#C6E4FF;--card:#fff;--ink:#2B2250;--soft:#6E6892;--grape:#6C4CF5;--grape-d:#4B2FCB;--line:#D9D3F2;--field:#F6F4FF;--bad:#E5484D;--ok:#1E9A69}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1C1838;--dot:#27224A;--card:#2C2650;--ink:#F4F0FF;--soft:#B8AEDC;--line:#443C72;--field:#231E42}}
+:root[data-theme="dark"]{--bg:#1C1838;--dot:#27224A;--card:#2C2650;--ink:#F4F0FF;--soft:#B8AEDC;--line:#443C72;--field:#231E42}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px 16px;color:var(--ink);background:var(--bg);background-image:radial-gradient(var(--dot) 2px,transparent 2.5px);background-size:26px 26px;font-family:'Fredoka','Trebuchet MS',system-ui,sans-serif}
+.card{background:var(--card);border-radius:28px;padding:28px 22px;max-width:420px;width:100%;box-shadow:0 8px 0 var(--line);text-align:center}
+.logo{font-size:56px;line-height:1}
+h1{font-size:30px;margin:8px 0 2px}
+.sub{color:var(--soft);margin:0 0 14px}
+label{display:block;text-align:left;font-size:15px;color:var(--soft);margin:12px 0 6px}
+input{width:100%;font-family:inherit;font-size:19px;padding:12px 14px;border-radius:14px;border:2px solid var(--line);background:var(--field);color:var(--ink)}
+input:focus-visible,button:focus-visible{outline:4px solid #FFC83D;outline-offset:2px}
+.btn{width:100%;margin-top:18px;background:var(--grape);color:#fff;border:none;font-family:inherit;font-size:21px;font-weight:600;padding:14px;border-radius:20px;box-shadow:0 6px 0 var(--grape-d);cursor:pointer}
+.btn:active{transform:translateY(4px);box-shadow:0 2px 0 var(--grape-d)}
+.btn[disabled]{opacity:.6;cursor:wait}
+.link{background:none;border:none;color:var(--grape);font-family:inherit;font-size:15px;text-decoration:underline;margin-top:14px;cursor:pointer;padding:8px}
+.msg{min-height:22px;font-size:15px;margin-top:10px;color:var(--bad)}
+.msg.ok{color:var(--ok)}
+[hidden]{display:none!important}
+.spin{width:44px;height:44px;border-radius:50%;border:5px solid var(--line);border-top-color:var(--grape);margin:18px auto 6px;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="logo" aria-hidden="true">✏️🦄</div>
+  <h1>PLIC Matemática</h1>
+
+  <form id="fLogin" hidden>
+    <p class="sub">Entre com o e-mail e a senha da família</p>
+    <label for="email">E-mail</label><input id="email" type="email" autocomplete="username" required>
+    <label for="pass">Senha</label><input id="pass" type="password" autocomplete="current-password" required>
+    <button class="btn" id="bLogin" type="submit">Entrar</button>
+    <button class="link" id="bForgot" type="button">Esqueci minha senha</button>
+  </form>
+
+  <form id="fNew" hidden>
+    <p class="sub">Crie a nova senha</p>
+    <label for="np1">Nova senha (mínimo 8 caracteres)</label><input id="np1" type="password" autocomplete="new-password" required>
+    <label for="np2">Repita a nova senha</label><input id="np2" type="password" autocomplete="new-password" required>
+    <button class="btn" id="bNew" type="submit">Salvar senha e entrar</button>
+  </form>
+
+  <div id="loading"><div class="spin" aria-hidden="true"></div><p class="sub" id="loadTxt">Carregando...</p></div>
+  <p class="msg" id="msg" role="status"></p>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
+<script>
+(function(){
+'use strict';
+const SB_URL='https://jkvzurnngeninpygplwx.supabase.co';
+const SB_KEY='sb_publishable_cXMBZW8svL5U4THEnE53HA_PTps8z5d';
+const APP_FILE='plic-app.html';
+const $=s=>document.querySelector(s);
+const msg=(t,ok)=>{$('#msg').textContent=t||'';$('#msg').className='msg'+(ok?' ok':'');};
+const view=v=>{['fLogin','fNew','loading'].forEach(id=>{$('#'+id).hidden=id!==v;});};
+const ERR={'Invalid login credentials':'E-mail ou senha incorretos.','Email not confirmed':'Este e-mail ainda não foi confirmado.','Email rate limit exceeded':'Muitas tentativas. Aguarde alguns minutos.'};
+const tr=e=>ERR[(e&&e.message)||'']||('Não foi possível concluir: '+((e&&e.message)||'erro desconhecido')+'.');
+
+if(!window.supabase){view(null);msg('Sem conexão com a internet. Verifique e recarregue a página.');}
+else{
+  const client=window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  let recovering=/type=recovery/.test(location.hash);
+
+  async function loadApp(session){
+    view('loading');$('#loadTxt').textContent='Abrindo o PLIC...';msg('');
+    const {data,error}=await client.storage.from('app').download(APP_FILE);
+    if(error||!data){view('fLogin');msg('Não foi possível abrir o app agora. Tente de novo em instantes.');return;}
+    const html=await data.text();
+    window.PLIC_SB={client,uid:session.user.id,email:session.user.email};
+    document.open();document.write(html);document.close();
+  }
+
+  client.auth.onAuthStateChange((ev,session)=>{if(ev==='PASSWORD_RECOVERY'){recovering=true;view('fNew');msg('');}});
+
+  $('#fLogin').addEventListener('submit',async e=>{
+    e.preventDefault();msg('');$('#bLogin').disabled=true;
+    const {data,error}=await client.auth.signInWithPassword({email:$('#email').value.trim(),password:$('#pass').value});
+    $('#bLogin').disabled=false;
+    if(error){msg(tr(error));return;}
+    loadApp(data.session);
+  });
+
+  $('#bForgot').onclick=async()=>{
+    const email=$('#email').value.trim();
+    if(!email){msg('Digite o seu e-mail no campo acima e toque de novo em "Esqueci minha senha".');$('#email').focus();return;}
+    const {error}=await client.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+    if(error){msg(tr(error));return;}
+    msg('Se este e-mail estiver cadastrado, enviamos um link para criar uma nova senha.',true);
+  };
+
+  $('#fNew').addEventListener('submit',async e=>{
+    e.preventDefault();const a=$('#np1').value,b=$('#np2').value;
+    if(a.length<8){msg('A senha precisa ter pelo menos 8 caracteres.');return;}
+    if(a!==b){msg('As duas senhas não são iguais.');return;}
+    $('#bNew').disabled=true;
+    const {error}=await client.auth.updateUser({password:a});
+    $('#bNew').disabled=false;
+    if(error){msg(tr(error));return;}
+    history.replaceState(null,'',location.pathname);recovering=false;
+    const {data}=await client.auth.getSession();if(data.session)loadApp(data.session);else view('fLogin');
+  });
+
+  (async()=>{
+    const {data}=await client.auth.getSession();
+    if(recovering){view(data.session?'fNew':'fLogin');return;}
+    if(data.session)loadApp(data.session);else view('fLogin');
+  })();
+}
+})();
+</script>
+</body>
+</html>
